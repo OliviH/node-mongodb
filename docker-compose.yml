@@ -1,0 +1,69 @@
+version: '3.8'
+
+services: 
+  mongodb:
+    container_name: $MONGO_CONTAINER_NAME
+    image: bitnami/mongodb:5.0.6-debian-10-r42
+    restart: always
+    env_file: ./.env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: $MONGO_INITDB_ROOT_USERNAME
+      MONGODB_ROOT_PASSWORD: $MONGO_INITDB_ROOT_PASSWORD
+    volumes: 
+      - ./DATAS/var/lib/mongodb:/bitnami/mongodb
+    networks:
+      - networkName
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${NETWORK_NAME}"
+      - "traefik.tcp.routers.${PROJECT_NAME}_db.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.${PROJECT_NAME}_db.entrypoints=${MONGO_CONTAINER_NAME}"
+      - "traefik.tcp.routers.${PROJECT_NAME}_db.service=${PROJECT_NAME}_db-proxy"
+      - "traefik.tcp.services.${PROJECT_NAME}_db-proxy.loadbalancer.server.port=27017"
+
+  # mongo-express:
+  #   image: mongo-express
+  #   container_name: $MONGO_EXPRESS_CONTAINER_NAME
+  #   restart: always
+  #   depends_on:
+  #     - mongodb 
+  #   environment:
+  #     ME_CONFIG_MONGODB_ADMINUSERNAME: $MONGO_INITDB_ROOT_USERNAME
+  #     ME_CONFIG_MONGODB_ADMINPASSWORD: $MONGO_INITDB_ROOT_PASSWORD
+  #     ME_CONFIG_MONGODB_URL: mongodb://root:$MONGO_INITDB_ROOT_PASSWORD@$MONGO_CONTAINER_NAME:27017/
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.services.${PROJECT_NAME}_express.loadbalancer.server.port=8081"
+  #     - "traefik.http.routers.${PROJECT_NAME}_express.entrypoints=http"
+  #     - "traefik.http.routers.${PROJECT_NAME}_express.rule=Host(`${HOST_EXPRESS}`)"
+
+  nodeapp:
+    container_name: $ENGINE_NAME
+    build: ./engine
+    image: node:alpine3.15
+    restart: always
+    env_file: ./.env
+    networks:
+      - networkName    
+    depends_on:
+      - mongodb 
+    volumes:
+      - ./engine/src:/app/src
+      - ./DATAS/var/lib/app:/var/lib/app
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=$MONGO_INITDB_ROOT_USERNAME
+      - MONGO_INITDB_ROOT_PASSWORD=$MONGO_INITDB_ROOT_PASSWORD
+      - HOST=$HOST
+      - HOST_EXPRESS=$HOST_EXPRESS
+      - URL_MONGO=mongodb://root:$MONGO_INITDB_ROOT_PASSWORD@$MONGO_CONTAINER_NAME
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.${PROJECT_NAME}_web.loadbalancer.server.port=3000"
+      - "traefik.http.routers.${PROJECT_NAME}_web.entrypoints=http"
+      - "traefik.http.routers.${PROJECT_NAME}_web.rule=Host(`${HOST}`)"
+
+networks:
+  networkName:
+    name: $NETWORK_NAME
+    driver: bridge
